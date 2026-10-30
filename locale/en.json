@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plugin Updater",
+    "description": "Checks installed plugins for newer versions when the app opens and upgrades them from the Plugins page."
+  }
+}
