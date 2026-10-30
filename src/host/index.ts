@@ -1,5 +1,5 @@
 /**
- * Host half of dsh-my-plugin-updater.
+ * Host half of dsh-plugin-updater.
  *
  * Registers the global session command `/refresh-title`, which regenerates the
  * receiving session's title and thereby unpins a manually renamed title. The
@@ -69,6 +69,6 @@ export function apply(ctx: HostContext): void {
         description: 'Regenerate this session title (also unpins a manually renamed title).',
         handler: handle,
       }),
-    'dsh-my-plugin-updater: /refresh-title command',
+    'dsh-plugin-updater: /refresh-title command',
   )
 }

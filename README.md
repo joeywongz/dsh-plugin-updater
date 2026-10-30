@@ -1,8 +1,8 @@
-# dsh-my-plugin-updater
+# dsh-plugin-updater
 
 DeepSeek Harness (dsh) 插件管理器：检查已安装插件的新版本、按版本升级、一键升级、启用/停用（开关）、卸载，展示每个插件的官方地址链接，以及在会话菜单里刷新会话标题。
 
-源码在 `/Users/joeywong/dsh-plugins/dsh-my-plugin-updater`。
+源码在 `/Users/joeywong/dsh-plugins/dsh-plugin-updater`。
 
 ## 技术栈
 
@@ -69,7 +69,7 @@ npm run build       # 重新生成 dist/client.js 与 lib/index.js
 ## 实现要点
 
 - **React 只从宿主加载**：bundle 把 `react` 标记为 external，构建产物里只有 `require("react")`，由 DSH 的模块加载器提供，避免出现第二份 React。
-- **样式随插件注入**：`styles.css?inline` 编译成字符串，`apply` 时插入 `<style data-dsh-plugin="dsh-my-plugin-updater">`，插件卸载时移除。
+- **样式随插件注入**：`styles.css?inline` 编译成字符串，`apply` 时插入 `<style data-dsh-plugin="dsh-plugin-updater">`，插件卸载时移除。
 - **升级路径**：DSH 没有 `updateBundle`，所以是 `removeBundle` + `installBundle(name@version, { enabled, saveExact: true })`；失败自动回滚到原版本。
 - **官方地址解析**：`resolveOfficialUrls` 与版本检查并行执行（并发 3），对每个插件请求**当前已安装版本**的版本清单（比完整 packument 小），失败再退回 `/latest`，避免过期 dist-tag 决定链接；取 `repository.directory` 目录深链 / `homepage` / `repository`，必要时回退到 `https://www.npmjs.com/package/<name>`。市场索引搜索结果里的 `homepage` / `repository` 也会在版本检查时补上（`shared/types.ts` 的 `MarketEntry` 已补字段）。链接按「插件名 + 已安装版本」缓存，升级后会重新解析；只有所有请求都明确返回 404/410 时才缓存「无链接」，超时 / 5xx 等瞬时失败不缓存，下次检查重试。`repository` 支持 `git+https`、`git+ssh`、`git://`、`git@host:owner/repo` 与 `github:` 等缩写，并拒绝 `file:`、`link:`、Windows 盘符等非网页地址；目录深链只对「根路径恰为 owner/repo」的 GitHub 仓库生成，目录会做 URL 编码。链接以 `target="_blank"` + `rel="noopener noreferrer"` 渲染。
 - **状态归属**：Zustand store 只保存派生数据，所有写操作仍以 Host 的 `pluginManager` Remote 结果为准，操作后重新 `listBundles()`。

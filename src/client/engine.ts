@@ -24,7 +24,7 @@ import {
   uniqueList,
 } from './utils'
 
-export const SELF = 'dsh-my-plugin-updater'
+export const SELF = 'dsh-plugin-updater'
 
 /** Remote namespaces this engine consumes; they may mount after the engine exists. */
 export interface EngineServices {
@@ -565,16 +565,16 @@ export function createEngine(deps: EngineDeps): Engine {
   async function refreshTitle(sessionId: string): Promise<void> {
     const commands = services.commands
     if (!commands || typeof commands.execute !== 'function') {
-      console.warn('[dsh-my-plugin-updater] command remote unavailable; cannot refresh the title')
+      console.warn('[dsh-plugin-updater] command remote unavailable; cannot refresh the title')
       return
     }
     try {
       const result = await commands.execute(sessionId, '/refresh-title', [])
       if (!result || result.ok === false) {
-        console.warn('[dsh-my-plugin-updater] title refresh failed: ' + errorText(result))
+        console.warn('[dsh-plugin-updater] title refresh failed: ' + errorText(result))
       }
     } catch (error) {
-      console.warn('[dsh-my-plugin-updater] title refresh failed: ' + String((error as Error)?.message || error))
+      console.warn('[dsh-plugin-updater] title refresh failed: ' + String((error as Error)?.message || error))
     }
   }
 

@@ -29,13 +29,13 @@ export default function createPlugin(): ClientPlugin {
       ctx.effect(() => {
         if (typeof document === 'undefined') return undefined
         const element = document.createElement('style')
-        element.dataset.dshPlugin = 'dsh-my-plugin-updater'
+        element.dataset.dshPlugin = 'dsh-plugin-updater'
         element.textContent = styles
         document.head.appendChild(element)
         return () => {
           element.remove()
         }
-      }, 'dsh-my-plugin-updater: styles')
+      }, 'dsh-plugin-updater: styles')
 
       ctx.effect(() => {
         const disposers = [
@@ -53,7 +53,7 @@ export default function createPlugin(): ClientPlugin {
             }
           }
         }
-      }, 'dsh-my-plugin-updater: dictionaries')
+      }, 'dsh-plugin-updater: dictionaries')
 
       const startManager = (manager: PluginManagerRemote) => {
         if (engine) return

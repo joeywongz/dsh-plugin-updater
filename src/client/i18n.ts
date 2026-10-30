@@ -17,8 +17,8 @@ export interface ClientContext {
   get?(key: string): unknown
 }
 
-export const NS = 'dshMyPluginUpdater'
-export const NS_ACTIONS = 'dshMyPluginUpdaterActions'
+export const NS = 'dshPluginUpdater'
+export const NS_ACTIONS = 'dshPluginUpdaterActions'
 
 export const pageDicts: Record<string, Record<string, string>> = {
   en: {

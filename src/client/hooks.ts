@@ -40,7 +40,7 @@ export function usePageTranslator(ctx: ClientContext): (key: string) => string {
   useLocaleTick(ctx)
   return (key: string) => {
     try {
-      return ctx.locale.bind('dshMyPluginUpdater')(key)
+      return ctx.locale.bind('dshPluginUpdater')(key)
     } catch {
       return lookup(currentLanguage(ctx), key, pageDicts)
     }

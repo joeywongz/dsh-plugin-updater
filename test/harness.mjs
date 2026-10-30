@@ -368,14 +368,14 @@ function makeBundles() {
       overrides: [],
     },
     {
-      name: 'dsh-my-plugin-updater',
+      name: 'dsh-plugin-updater',
       official: false,
       availability: 'profile',
       version: '2.0.0',
       installed: true,
       enabled: true,
       removable: true,
-      source: 'link:/Users/joeywong/dsh-plugins/dsh-my-plugin-updater',
+      source: 'link:/Users/joeywong/dsh-plugins/dsh-plugin-updater',
       rows: [],
       overrides: [],
     },
@@ -767,8 +767,8 @@ check(
 )
 check(
   'locally linked updater shows no broken npm link',
-  linksInRow(tree, 'dsh-my-plugin-updater').length === 0,
-  JSON.stringify(linksInRow(tree, 'dsh-my-plugin-updater').map((link) => link.props.href)),
+  linksInRow(tree, 'dsh-plugin-updater').length === 0,
+  JSON.stringify(linksInRow(tree, 'dsh-plugin-updater').map((link) => link.props.href)),
 )
 check(
   'unusable repository metadata falls back to the npm package page',
