@@ -468,6 +468,7 @@ window.__ModuleLoader__.load({
         return parts.join(" · ") || "unknown error";
       }
       const SELF = "dsh-plugin-updater";
+      const OFFICIAL_ADDRESSES_PATH = "/dsh-plugin-updater/official-addresses";
       function classifyBundle(bundle) {
         if (bundle.availability !== "installation") return "external";
         const name = String(bundle.name || "");
@@ -666,8 +667,8 @@ window.__ModuleLoader__.load({
           if (!current || current.officialUrl) return;
           setRow(name, { officialUrl: url });
         }
-        async function resolveOfficialUrls(rows) {
-          const pending = rows.filter((row) => !row.officialUrl);
+        async function resolveOfficialUrls() {
+          const pending = getUpdaterState().rows.filter((row) => !row.officialUrl);
           await mapLimit(pending, 3, async (row) => {
             const key = officialKey(row);
             if (officialUrls.has(key)) {
@@ -686,6 +687,31 @@ window.__ModuleLoader__.load({
               officialUrls.set(key, null);
             }
           });
+        }
+        async function applyHostOfficialLinks() {
+          if (typeof fetch !== "function") return;
+          const controller = typeof AbortController === "function" ? new AbortController() : null;
+          const timer = controller ? setTimeout(() => controller.abort(), 6e3) : null;
+          try {
+            const response = await fetch(OFFICIAL_ADDRESSES_PATH, {
+              signal: controller ? controller.signal : void 0,
+              headers: { accept: "application/json" }
+            });
+            if (timer) clearTimeout(timer);
+            if (!response.ok) return;
+            const payload = await response.json();
+            const links = payload && payload.links;
+            if (!links || typeof links !== "object") return;
+            for (const [name, meta] of Object.entries(links)) {
+              if (!meta || typeof meta !== "object") continue;
+              const row = rowOf(name);
+              if (!row || row.officialUrl) continue;
+              const url = repositoryDeepLink(meta.repository) || httpUrl(meta.homepage) || repositoryUrl(meta.repository);
+              if (url) setRow(name, { officialUrl: url });
+            }
+          } catch {
+            if (timer) clearTimeout(timer);
+          }
         }
         function toRow(bundle) {
           if (!bundle || !bundle.name || bundle.availability === "missing") return null;
@@ -776,7 +802,9 @@ window.__ModuleLoader__.load({
           const rows = await readRows();
           if (!rows) return;
           patchUpdaterState({ rows });
-          await Promise.all([resolvePending(rows), resolveOfficialUrls(rows)]);
+          const pendingVersions = resolvePending(rows);
+          await applyHostOfficialLinks();
+          await Promise.all([pendingVersions, resolveOfficialUrls()]);
           patchUpdaterState({ phase: "ready", checkedAt: Date.now() });
         }
         async function boot() {
@@ -788,7 +816,9 @@ window.__ModuleLoader__.load({
           rememberBundles(listed.value);
           const rows = listed.value.map(toRow).filter((row) => Boolean(row));
           patchUpdaterState({ rows, serviceReady: true, phase: "checking" });
-          await Promise.all([resolvePending(rows), resolveOfficialUrls(rows)]);
+          const pendingVersions = resolvePending(rows);
+          await applyHostOfficialLinks();
+          await Promise.all([pendingVersions, resolveOfficialUrls()]);
           patchUpdaterState({ phase: "ready", checkedAt: Date.now() });
         }
         async function upgradeTo(name, targetVersion) {

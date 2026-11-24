@@ -8,8 +8,9 @@
  * way with a fake Host context.
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const root = resolve(import.meta.dirname, '..')
@@ -237,9 +238,17 @@ globalThis.__ModuleLoader__ = {
 const fetchCalls = []
 let flakyMode = true
 
+const hostOfficialLinks = {
+  'local-only': { homepage: 'https://github.com/example/local-only' },
+  'local-git': { repository: { type: 'git', url: 'git@github.com:example/local-git.git' } },
+}
+
 function fakeFetch(url) {
   const target = String(url)
   fetchCalls.push(target)
+  if (target === '/dsh-plugin-updater/official-addresses') {
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({ links: hostOfficialLinks }) })
+  }
   if (flakyMode && target.includes('/flaky-plugin/')) {
     // Simulates a timeout / network failure: not a definitive "no such package".
     return Promise.reject(new Error('fake network down'))
@@ -436,6 +445,30 @@ function makeBundles() {
       enabled: true,
       removable: true,
       source: 'flaky-plugin@^1.0.0',
+      rows: [],
+      overrides: [],
+    },
+    {
+      name: 'local-only',
+      official: false,
+      availability: 'profile',
+      version: '1.0.0',
+      installed: true,
+      enabled: true,
+      removable: true,
+      source: 'link:/tmp/local-only',
+      rows: [],
+      overrides: [],
+    },
+    {
+      name: 'local-git',
+      official: false,
+      availability: 'profile',
+      version: '1.0.0',
+      installed: true,
+      enabled: true,
+      removable: true,
+      source: 'link:/tmp/local-git',
       rows: [],
       overrides: [],
     },
@@ -704,7 +737,7 @@ injectedMarket({ remote: { pluginMarket: market } })
 injectedCommands({ remote: { commands } })
 
 let tree = await until(
-  (current) => normalizedText(current).includes('0.74.0') && findLinks(current).length === 9,
+  (current) => normalizedText(current).includes('0.74.0') && findLinks(current).length === 11,
 )
 
 const bootText = normalizedText(tree)
@@ -723,7 +756,7 @@ check('shipped rows show the shipped status', bootText.includes('statusShipped')
 const officialLinks = findLinks(tree)
 check(
   'renders one official link for every resolvable plugin',
-  officialLinks.length === 9,
+  officialLinks.length === 11,
   'got ' + officialLinks.length + ' ' + JSON.stringify(officialLinks.map((link) => link.props.href)),
 )
 check(
@@ -764,6 +797,21 @@ check(
   'market index homepage is used when the registry has no manifest',
   linksInRow(tree, 'market-plugin')[0]?.props.href === 'https://example.com/market-plugin',
   JSON.stringify(linksInRow(tree, 'market-plugin').map((link) => link.props.href)),
+)
+check(
+  'Host package.json metadata links a local, non-npm plugin',
+  linksInRow(tree, 'local-only')[0]?.props.href === 'https://github.com/example/local-only',
+  JSON.stringify(linksInRow(tree, 'local-only').map((link) => link.props.href)),
+)
+check(
+  'Host Git remote fallback links a local plugin without package.json metadata',
+  linksInRow(tree, 'local-git')[0]?.props.href === 'https://github.com/example/local-git',
+  JSON.stringify(linksInRow(tree, 'local-git').map((link) => link.props.href)),
+)
+check(
+  'the Host route is requested before registry lookups',
+  fetchCalls.includes('/dsh-plugin-updater/official-addresses'),
+  JSON.stringify(fetchCalls.filter((url) => url.startsWith('/'))),
 )
 check(
   'locally linked updater shows no broken npm link',
@@ -858,7 +906,7 @@ check(
 
 // ---- uninstall with confirmation
 const removeButtons = findButtons(tree, (node) => normalizedText(node) === 'uninstall')
-check('renders uninstall for removable plugins', removeButtons.length === 8, 'got ' + removeButtons.length)
+check('renders uninstall for removable plugins', removeButtons.length === 10, 'got ' + removeButtons.length)
 buttonsInRow(tree, 'git-plugin', 'uninstall')[0].props.onClick()
 tree = await settle()
 check('uninstall asks for confirmation', normalizedText(tree).includes('confirmRemove'))
@@ -904,9 +952,44 @@ check(
 )
 
 // ---- host half
+const profileDir = mkdtempSync(join(tmpdir(), 'dsh-updater-profile-'))
+mkdirSync(join(profileDir, 'node_modules', 'local-only'), { recursive: true })
+writeFileSync(
+  join(profileDir, 'package.json'),
+  JSON.stringify({
+    name: 'dsh-profile-test',
+    private: true,
+    dependencies: {
+      'local-only': 'link:/tmp/local-only',
+      'local-git': 'link:/tmp/local-git',
+      'dsh-context': '0.77.0',
+    },
+    dsh: { profile: { bundles: ['local-only', 'local-git', 'dsh-context'] } },
+  }),
+)
+mkdirSync(join(profileDir, 'node_modules', 'local-git', '.git'), { recursive: true })
+writeFileSync(
+  join(profileDir, 'node_modules', 'local-git', 'package.json'),
+  JSON.stringify({ name: 'local-git', version: '1.0.0' }),
+)
+writeFileSync(
+  join(profileDir, 'node_modules', 'local-git', '.git', 'config'),
+  '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = git@github.com:example/local-git.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n',
+)
+writeFileSync(
+  join(profileDir, 'node_modules', 'local-only', 'package.json'),
+  JSON.stringify({
+    name: 'local-only',
+    version: '1.0.0',
+    homepage: 'https://github.com/example/local-only',
+    repository: { type: 'git', url: 'git+https://github.com/example/local-only.git' },
+  }),
+)
+
 const hostModule = await import(pathToFileURL(resolve(root, 'lib', 'index.js')).href)
 const hostCommands = []
 const refreshedSessions = []
+let capturedOfficialRoute = null
 const hostCtx = {
   get(name) {
     if (name === 'sessionTitle') {
@@ -917,7 +1000,21 @@ const hostCtx = {
         },
       }
     }
+    if (name === 'webServer') {
+      return {
+        register(route) {
+          capturedOfficialRoute = route
+          return () => {
+            capturedOfficialRoute = null
+          }
+        },
+      }
+    }
+    if (name === 'profileContext') return { dir: profileDir, installAnchor: profileDir }
     return undefined
+  },
+  inject(deps, callback) {
+    if (deps.includes('webServer')) callback(hostCtx)
   },
   sessions: { get: (id) => (id === 'missing' ? undefined : { id, marker: true }) },
   commands: {
@@ -944,6 +1041,40 @@ check(
 )
 const missing = await hostCommands[0].handler({ agent: { id: 'missing' }, signal: new AbortController().signal })
 check('host command reports a missing session as an error', missing.kind === 'error')
+
+// ---- host official-address route
+check(
+  'host half registers the official-address route',
+  Boolean(capturedOfficialRoute) &&
+    capturedOfficialRoute.kind === 'exact' &&
+    capturedOfficialRoute.path === '/dsh-plugin-updater/official-addresses',
+  JSON.stringify(capturedOfficialRoute && { kind: capturedOfficialRoute.kind, path: capturedOfficialRoute.path }),
+)
+const addressesResponse = await capturedOfficialRoute.resource(
+  new Request('http://127.0.0.1' + capturedOfficialRoute.path),
+)
+const addressesPayload = await addressesResponse.json()
+check(
+  'host route returns local package homepage metadata',
+  addressesPayload.links['local-only']?.homepage === 'https://github.com/example/local-only',
+  JSON.stringify(addressesPayload.links['local-only']),
+)
+check(
+  'host route returns repository metadata for deep links',
+  addressesPayload.links['local-only']?.repository?.url === 'git+https://github.com/example/local-only.git',
+  JSON.stringify(addressesPayload.links['local-only']?.repository),
+)
+check(
+  'host route derives a local package from its Git remote',
+  addressesPayload.links['local-git']?.repository?.url === 'git@github.com:example/local-git.git',
+  JSON.stringify(addressesPayload.links['local-git']),
+)
+check('host route skips packages without link metadata', !('dsh-context' in addressesPayload.links))
+check(
+  'host route response is not cached',
+  String(addressesResponse.headers.get('cache-control')).includes('no-store'),
+)
+rmSync(profileDir, { recursive: true, force: true })
 
 // -------------------------------------------------------------------- summary
 if (failures.length) {

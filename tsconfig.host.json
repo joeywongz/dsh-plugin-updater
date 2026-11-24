@@ -9,7 +9,7 @@
     "sourceMap": false,
     "rootDir": "src/host",
     "outDir": "lib",
-    "types": []
+    "types": ["node"]
   },
   "include": ["src/host"]
 }

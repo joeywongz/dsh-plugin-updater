@@ -41,6 +41,7 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
@@ -51,5 +52,13 @@
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "zustand": "^4.5.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joeywongz/dsh-plugin-updater.git"
+  },
+  "homepage": "https://github.com/joeywongz/dsh-plugin-updater#readme",
+  "bugs": {
+    "url": "https://github.com/joeywongz/dsh-plugin-updater/issues"
   }
 }

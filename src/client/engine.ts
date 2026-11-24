@@ -26,6 +26,18 @@ import {
 
 export const SELF = 'dsh-plugin-updater'
 
+/** Host route served by this plugin's Host half (see src/host/index.ts). */
+const OFFICIAL_ADDRESSES_PATH = '/dsh-plugin-updater/official-addresses'
+
+interface HostOfficialLink {
+  homepage?: unknown
+  repository?: unknown
+}
+
+interface HostOfficialPayload {
+  links?: Record<string, HostOfficialLink>
+}
+
 /** Remote namespaces this engine consumes; they may mount after the engine exists. */
 export interface EngineServices {
   market: PluginMarketRemote | null
@@ -308,8 +320,8 @@ export function createEngine(deps: EngineDeps): Engine {
     setRow(name, { officialUrl: url })
   }
 
-  async function resolveOfficialUrls(rows: UpdaterRow[]): Promise<void> {
-    const pending = rows.filter((row) => !row.officialUrl)
+  async function resolveOfficialUrls(): Promise<void> {
+    const pending = getUpdaterState().rows.filter((row) => !row.officialUrl)
     await mapLimit(pending, 3, async (row) => {
       const key = officialKey(row)
       if (officialUrls.has(key)) {
@@ -328,6 +340,37 @@ export function createEngine(deps: EngineDeps): Engine {
         officialUrls.set(key, null)
       }
     })
+  }
+
+  /**
+   * Ask the Host half for the `homepage` / `repository` fields of every
+   * profile-installed package. This is the only source for locally developed
+   * (non-npm) plugins; it runs before registry lookups so package.json wins.
+   */
+  async function applyHostOfficialLinks(): Promise<void> {
+    if (typeof fetch !== 'function') return
+    const controller = typeof AbortController === 'function' ? new AbortController() : null
+    const timer = controller ? setTimeout(() => controller.abort(), 6000) : null
+    try {
+      const response = await fetch(OFFICIAL_ADDRESSES_PATH, {
+        signal: controller ? controller.signal : undefined,
+        headers: { accept: 'application/json' },
+      })
+      if (timer) clearTimeout(timer)
+      if (!response.ok) return
+      const payload = (await response.json()) as HostOfficialPayload
+      const links = payload && payload.links
+      if (!links || typeof links !== 'object') return
+      for (const [name, meta] of Object.entries(links)) {
+        if (!meta || typeof meta !== 'object') continue
+        const row = rowOf(name)
+        if (!row || row.officialUrl) continue
+        const url = repositoryDeepLink(meta.repository) || httpUrl(meta.homepage) || repositoryUrl(meta.repository)
+        if (url) setRow(name, { officialUrl: url })
+      }
+    } catch {
+      if (timer) clearTimeout(timer)
+    }
   }
 
   function toRow(bundle: BundleInfo): UpdaterRow | null {
@@ -423,7 +466,9 @@ export function createEngine(deps: EngineDeps): Engine {
     const rows = await readRows()
     if (!rows) return
     patchUpdaterState({ rows })
-    await Promise.all([resolvePending(rows), resolveOfficialUrls(rows)])
+    const pendingVersions = resolvePending(rows)
+    await applyHostOfficialLinks()
+    await Promise.all([pendingVersions, resolveOfficialUrls()])
     patchUpdaterState({ phase: 'ready', checkedAt: Date.now() })
   }
 
@@ -436,7 +481,9 @@ export function createEngine(deps: EngineDeps): Engine {
     rememberBundles(listed.value)
     const rows = listed.value.map(toRow).filter((row): row is UpdaterRow => Boolean(row))
     patchUpdaterState({ rows, serviceReady: true, phase: 'checking' })
-    await Promise.all([resolvePending(rows), resolveOfficialUrls(rows)])
+    const pendingVersions = resolvePending(rows)
+    await applyHostOfficialLinks()
+    await Promise.all([pendingVersions, resolveOfficialUrls()])
     patchUpdaterState({ phase: 'ready', checkedAt: Date.now() })
   }
 
